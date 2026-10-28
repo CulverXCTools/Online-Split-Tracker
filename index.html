@@ -8,11 +8,11 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Splits">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#d9480f">
+<meta name="theme-color" content="#7a1428">
 <style>
-:root{--bg:#f6f5f1;--card:#fff;--tx:#1b1b1a;--mut:#77756e;--ac:#d9480f;--ln:#e4e2db;--ok:#2b8a3e;--bad:#c92a2a;--wn:#f0b400;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151514;--card:#222220;--tx:#f1efe8;--mut:#a09d92;--ac:#ff7a3d;--ln:#35342f;--ok:#69db7c;--bad:#ff8787;--wn:#ffd43b;color-scheme:dark}}
-:root[data-theme="dark"]{--bg:#151514;--card:#222220;--tx:#f1efe8;--mut:#a09d92;--ac:#ff7a3d;--ln:#35342f;--ok:#69db7c;--bad:#ff8787;--wn:#ffd43b;color-scheme:dark}
+:root{--bg:#f6f5f1;--card:#fff;--tx:#1b1b1a;--mut:#77756e;--ac:#7a1428;--ln:#e4e2db;--ok:#2b8a3e;--bad:#c92a2a;--wn:#f0b400;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151514;--card:#222220;--tx:#f1efe8;--mut:#a09d92;--ac:#c13a55;--ln:#35342f;--ok:#69db7c;--bad:#ff8787;--wn:#ffd43b;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#151514;--card:#222220;--tx:#f1efe8;--mut:#a09d92;--ac:#c13a55;--ln:#35342f;--ok:#69db7c;--bad:#ff8787;--wn:#ffd43b;color-scheme:dark}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body,button,input,select,label,summary,.tab,.chk,.lap{touch-action:manipulation;-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,Segoe UI,sans-serif}
@@ -400,24 +400,22 @@ function bindSync(){
   }
   if(c){c.textContent='Import splits';c.onclick=()=>{S.modal={type:'scan'};render()}}
 }
-// --- Live unlock only (codes). Helper hosting / invite is always free. ---
+// --- Live sync needs an access code. Inviting helpers, importing splits and the Helper tab never need one. ---
 const lsGet=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
 const lsSet=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
-const hasLive=()=>{if(lsGet('rst-live-v1')==='1')return true;const u=+lsGet('rst-live-until')||0;return u>Date.now()};
-const setLive=v=>lsSet('rst-live-v1',v?'1':'0');
+const liveCode=()=>String(lsGet('rst-live-code')||'');
+const hasLive=()=>{const u=+lsGet('rst-live-until')||0;return u>Date.now()&&!!liveCode()};
 const setLiveUntil=ts=>lsSet('rst-live-until',String(ts||0));
 function unlockLeftHint(){
-  if(lsGet('rst-live-v1')==='1')return 'Live: unlocked';
   const lu=+lsGet('rst-live-until')||0;
-  if(lu>Date.now())return 'Live until '+new Date(lu).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+  if(lu>Date.now()&&liveCode())return 'Live until '+new Date(lu).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
   return '';
 }
 function fmtLeft(ms){const m=Math.max(0,Math.floor(ms/60000)),d=Math.floor(m/1440),h=Math.floor((m%1440)/60),mm=m%60;return d?`${d}d ${h}h`:h?`${h}h ${mm}m`:(m<1?'<1m':`${mm}m`)}
 function unlockTime(){
-  if(lsGet('rst-live-v1')==='1')return{t:'',low:false};
   const u=+lsGet('rst-live-until')||0;if(!u)return{t:'',low:false};
   const left=u-Date.now();
-  return{t:'⏱ Live: '+(left>0?fmtLeft(left)+' left':'expired — redeem a new code'),low:left<3600000};
+  return{t:'⏱ Live: '+(left>0?fmtLeft(left)+' left':'code expired — enter a new access code'),low:left<3600000};
 }
 function unlockTimeHTML(){const u=unlockTime();return u.t?`<p class="hint" id="ult"${u.low?' style="color:var(--bad)"':''}>${esc(u.t)}</p>`:''}
 setInterval(()=>{const e=$('#ult');if(!e)return;const u=unlockTime();e.textContent=u.t;e.style.color=u.low?'var(--bad)':''},20000);
@@ -425,13 +423,13 @@ function showLivePaywall(){S.modal={type:'host',reason:'live'};render()}
 function hostPaywallModal(el){
   const left=unlockLeftHint();
   el.innerHTML=`<div class="ov"><div class="mdl"><h2>Live sync</h2>
-  <p class="hint">Live sync publishes this race to Firebase so helpers update in real time. A code is required so the database isn’t left open for everyone.</p>
-  <div class="card"><b>Always free</b><div class="hint" style="margin:4px 0 0">Invite helpers (QR), import helper results, and the Helper tab — no code needed.</div></div>
+  <p class="hint">Live sync publishes this race online so helpers update in real time. It needs an access code so the database isn’t open to everyone.</p>
+  <div class="card"><b>No code needed for the rest</b><div class="hint" style="margin:4px 0 0">Inviting helpers (QR), importing helper results, and the Helper tab all work without a code. Helpers never need one.</div></div>
   ${left?`<p class="hint">${esc(left)}</p>`:''}
-  <label for="ulcode">Live unlock code</label>
+  <label for="ulcode">Access code</label>
   <input id="ulcode" placeholder="e.g. MEET-SAT-01" autocomplete="off" autocapitalize="characters" spellcheck="false">
   <p class="hint" id="ulmsg" style="margin-top:6px"></p>
-  <button class="p" id="ulgo" style="width:100%">Redeem code</button>
+  <button class="p" id="ulgo" style="width:100%">Enter code</button>
   <div class="bar" style="margin-top:12px"><button class="s" id="hp-no">Not now</button></div>
   </div></div>`;
   const msg=$('#ulmsg');
@@ -441,9 +439,8 @@ function hostPaywallModal(el){
     btn.disabled=true;msg.textContent='Checking…';msg.style.color='';
     try{
       const r=await redeemUnlockCode(inp.value);
-      if(!r.live){msg.textContent='That code doesn’t include Live sync';msg.style.color='var(--bad)';btn.disabled=false;return}
-      msg.textContent='Live unlocked for '+r.hours+' hour'+(r.hours===1?'':'s')+' · '+r.left+' use'+(r.left===1?'':'s')+' left on this code';
-      setFlash('Live unlocked for '+r.hours+'h');
+      msg.textContent='Live sync on until '+new Date(r.until).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+      setFlash('Access code accepted — Live sync on');
       setTimeout(()=>{S.modal=null;render()},700);
     }catch(e){
       msg.textContent=e.message||'Could not redeem';
@@ -452,80 +449,32 @@ function hostPaywallModal(el){
     }
   };
 }
-// Redeem a code from Firebase: codes/{CODE} with maxUses, used, host, live, hours
+// Check an access code in Firebase: codes/{CODE} with expires (ms since 1970). The database rules enforce it on every write.
 async function redeemUnlockCode(raw){
   const code=String(raw||'').trim().toUpperCase().replace(/\s+/g,'');
   if(!code)throw new Error('Enter a code');
   if(!/^[A-Z0-9][A-Z0-9_-]{2,31}$/.test(code))throw new Error('That doesn’t look like a valid code');
-  if(!fbOK())throw new Error('Live/database isn’t set up in this copy of the app');
+  if(!fbOK())throw new Error('Live sync isn’t set up in this copy of the app');
   if(!(await ensureFB())||!FB.db)throw new Error('No connection — try again online');
   if(!FB.conn){
     await new Promise(ok=>{let n=0;const t=setInterval(()=>{if(FB.conn||++n>30){clearInterval(t);ok()}},100)});
   }
   if(!FB.conn)throw new Error('No connection — try again online');
-  const ref=FB.db.ref('codes/'+code);
-  let pre;
+  let snap;
   try{
-    pre=await ref.once('value');
+    snap=await FB.db.ref('codes/'+code).once('value');
   }catch(e){
-    if((e&&e.code)==='PERMISSION_DENIED')throw new Error('Database rules block codes — open Rules, add the codes section, Publish');
+    if((e&&e.code)==='PERMISSION_DENIED')throw new Error('Database rules block codes — publish the rules from FIREBASE-SETUP.md');
     throw new Error((e&&e.message)||'Could not read code');
   }
-  if(!pre.exists())throw new Error('Code not found — check the spelling and try again');
-  const v0=pre.val()||{};
-  const max0=Math.max(1,+v0.maxUses||1),used0=Math.max(0,+v0.used||0);
-  if(used0>=max0)throw new Error('This code has no redemptions left');
-  // RTDB transactions often get a first pass with null local data; returning undefined aborts.
-  // Use the pre-read as a fallback so the first pass still returns a valid update.
-  let tx;
-  try{
-    tx=await ref.transaction(cur=>{
-      const c=cur||v0;
-      if(!c)return;
-      const max=Math.max(1,+c.maxUses||1),used=Math.max(0,+c.used||0);
-      if(used>=max)return;
-      return{
-        maxUses:max,
-        used:used+1,
-        host:c.host===undefined?true:c.host,
-        live:c.live===undefined?false:!!c.live,
-        hours:c.hours==null?24:+c.hours
-      };
-    });
-  }catch(e){
-    if((e&&e.code)==='PERMISSION_DENIED')throw new Error('Database rules block redeeming — add the codes rules and Publish');
-    throw new Error((e&&e.message)||'Redeem failed');
-  }
-  let d=tx&&tx.committed?tx.snapshot.val():null;
-  // Fallback: plain update if the transaction still did not commit
-  if(!d){
-    try{
-      const again=await ref.once('value');
-      if(!again.exists())throw new Error('Code not found');
-      const c=again.val()||{};
-      const max=Math.max(1,+c.maxUses||1),used=Math.max(0,+c.used||0);
-      if(used>=max)throw new Error('This code has no redemptions left');
-      d={
-        maxUses:max,
-        used:used+1,
-        host:c.host===undefined?true:c.host,
-        live:c.live===undefined?false:!!c.live,
-        hours:c.hours==null?24:+c.hours
-      };
-      await ref.set(d);
-    }catch(e){
-      if((e&&e.code)==='PERMISSION_DENIED')throw new Error('Database rules block redeeming — add the codes rules and Publish');
-      if(e&&e.message&&e.message.indexOf('redemptions')>=0)throw e;
-      throw new Error((e&&e.message)||'Could not redeem — try again');
-    }
-  }
-  const hours=Math.max(1,Math.min(24*30,+d.hours||24));
-  const until=Date.now()+hours*3600*1000;
-  const live=!!d.live&&d.live!=='0';
-  if(live)setLiveUntil(until);
-  else throw new Error('That code doesn’t include Live sync');
-  const left=Math.max(0,(+d.maxUses||1)-(+d.used||0));
-  return{hours,host:false,live:true,left};
+  if(!snap.exists())throw new Error('Code not found — check the spelling and try again');
+  const d=snap.val()||{};
+  const until=+d.expires||0;
+  const nowS=Date.now()+(+FB.so||0);
+  if(!(until>nowS))throw new Error('This code has expired');
+  lsSet('rst-live-code',code);
+  setLiveUntil(until-(+FB.so||0));
+  return{until};
 }
 function flashUI(){let f=$('#flash');if(!f){f=document.createElement('div');f.id='flash';f.className='flash';document.body.appendChild(f)}f.textContent=S.flash;f.style.display=S.flash?'block':'none'}
 function setFlash(msg){S.flash=msg;flashUI();clearTimeout(setFlash.t);setFlash.t=setTimeout(()=>{S.flash='';flashUI()},3500)}
@@ -1089,11 +1038,11 @@ const liveOn=()=>fbOK()&&!S.offline;
 // One place for every Firebase failure: remembers it for the status line and tells the person once.
 function liveErr(e){
   const c=(e&&e.code)||'error';LV.err=c;
-  if(LV.shown!==c){LV.shown=c;setFlash(c==='PERMISSION_DENIED'?'Live sync blocked — update the database rules':'Live sync problem ('+c+')')}
+  if(LV.shown!==c){LV.shown=c;setFlash(c==='PERMISSION_DENIED'?'Live sync blocked — access code expired, or database rules need updating':'Live sync problem ('+c+')')}
   updLive();
 }
 function setOffline(v){
-  // Organizer turning Live on requires a Live code (helpers can always connect / use QR)
+  // Organizer turning Live on requires an access code (helpers never need one; QR needs none)
   if(!v&&!isH()&&!hasLive()){
     showLivePaywall();
     const c=$('#offm');if(c)c.checked=true;
@@ -1124,8 +1073,8 @@ function liveStatus(){
     if(h)return{t:nTaps()&&S.lv.dirty?'Offline mode — splits stay on this phone. Turn offline mode off to upload them, or use Send to organizer (QR).':'Offline mode — use Send to organizer (QR).'};
     return{t:'Offline mode — import helper results with QR codes.'};
   }
-  if(LV.err)return{t:'Live sync blocked ('+LV.err+') — check the database rules.'};
-  if(!h&&!hasLive())return{t:'Live needs a code on this phone — helpers still work with QR. Uncheck Offline mode and redeem a Live code to publish.'};
+  if(LV.err)return{t:'Live sync blocked ('+LV.err+') — the access code may have expired, or the database rules need updating.'};
+  if(!h&&!hasLive())return{t:'Live sync needs an access code on this phone — helpers and QR codes work without one. Uncheck Offline mode and enter a code to publish.'};
   if(!h&&!run)return{t:'Live sync on — helper splits arrive automatically once the race starts. QR still works too.'};
   if(h&&!S.hinv)return{t:'Live sync on — scan the organizer’s invite and your splits upload automatically.'};
   if(!FB.db||!FB.conn){
@@ -1229,6 +1178,14 @@ async function liveFlush(){
 }
 
 // ---- organizer -> helpers: race clock, goals and everyone's splits ----
+// Each live race is tagged with the organizer's access code (races/{rid}/k, not readable by helpers).
+// The database rules only accept helper and organizer writes for a race whose code exists and hasn't expired.
+function ensureRaceKey(rid){
+  if(LV.krid===rid)return Promise.resolve();
+  const code=liveCode();
+  if(!code)return Promise.reject({code:'PERMISSION_DENIED'});
+  return FB.db.ref('races/'+rid+'/k').set(code).then(()=>{LV.krid=rid});
+}
 function oCore(){
   const g={};S.order.forEach(p=>{if(S.goals[p.id]>0)g[p.id]=S.goals[p.id]});
   return{ph:S.phase,ep:S.epoch,fin:Math.round(S.final||0),tot:S.total===''?null:S.total,u:S.unit,g,
@@ -1249,7 +1206,7 @@ function orgPublish(force){
     if(!FB.conn){LV.ot=setTimeout(attempt,500);return}
     const ts=(firebase.database&&firebase.database.ServerValue&&firebase.database.ServerValue.TIMESTAMP)||Date.now();
     try{
-      FB.db.ref('races/'+rid+'/h/_org').set({d,off:FB.so==null?null:FB.so,ts})
+      ensureRaceKey(rid).then(()=>FB.db.ref('races/'+rid+'/h/_org').set({d,off:FB.so==null?null:FB.so,ts}))
         .then(()=>{LV.osent=d;LV.srid=rid;LV.err='';updLive()})
         .catch(e=>{liveErr(e);LV.ot=setTimeout(attempt,3000)});
     }catch(e){liveErr(e);LV.ot=setTimeout(attempt,3000)}
@@ -1281,7 +1238,7 @@ function hAttach(){
   HO.ref.on('value',HO.cb,liveErr);
 }
 function hDetach(){if(HO.ref){try{HO.ref.off('value',HO.cb)}catch(e){}}HO.ref=null;HO.lrid=null}
-// After finish: one last merge of helper data, then delete the race node so the free tier stays clean.
+// After finish: one last merge of helper data, then delete the race node so the database stays tidy.
 async function orgCleanupRace(){
   if(!S.rid||!FB.db||S.liveCleared)return;
   LV.pend=true;try{pump()}catch(e){}
@@ -1298,7 +1255,7 @@ async function orgCleanupRace(){
       if(Object.keys(u).length)await FB.db.ref('races/'+rid+'/h').update(u);
     }catch(e2){liveErr(e2);setFlash('Race saved on this phone — could not clear live data');return}
   }
-  S.liveCleared=true;orgDetach();LV.osent='';LV.srid='';
+  S.liveCleared=true;orgDetach();LV.osent='';LV.srid='';LV.krid='';
   saveState();
   setFlash('Race saved on this phone · live data cleared');
   updLive();
@@ -1687,7 +1644,7 @@ function startRace(){
   S.pred=S.order.map(p=>String(p.id));
   S.markers=mks().map((k,i)=>{const useTot=!S.marks.length&&k.dist===''&&+S.total>0;const m={label:k.label,dist:useTot?S.total:k.dist,unit:useTot?S.unit:(k.unit||S.unit),actual:S.order.map(p=>p.id),laps:[]};relabel(m,i);return m});S.cur=0;
   S.final=0;S.rid=S.invRid||Math.random().toString(36).slice(2,8);S.invRid='';S.epoch=Date.now();S.phase='race';S.start=performance.now();
-  LV.osent='';LV.srid='';S.liveCleared=false; // force a fresh publish for the new race
+  LV.osent='';LV.srid='';LV.krid='';S.liveCleared=false; // force a fresh publish for the new race
   render();tick();
   // Ensure the organizer payload is written even if the first liveStep raced the connection
   setTimeout(()=>orgPublish(true),500);

@@ -1,6 +1,6 @@
 # Turning on live sync (Firebase, free plan)
 
-The app works without any of this (QR codes only). Do these steps once to let helpers' splits reach the organizer automatically.
+The app works without any of this (QR codes only). Do these steps once to let helpers' splits reach the organizer automatically. Only the organizer needs an access code for this; helpers never do.
 
 ## 1. Create the project
 1. Go to https://console.firebase.google.com and sign in with a Google account.
@@ -16,57 +16,61 @@ The app works without any of this (QR codes only). Do these steps once to let he
   "rules": {
     ".read": false,
     ".write": false,
-    "races": {
-      "$rid": {
-        ".read": "$rid.length <= 12",
-        ".write": "$rid.length <= 12",
-        "h": {
-          ".read": "$rid.length <= 12",
-          "$hid": {
-            ".write": "$rid.length <= 12 && $hid.length <= 16",
-            ".validate": "newData.hasChildren() || !newData.exists()"
-          }
-        }
-      }
-    },
     "codes": {
       "$code": {
         ".read": true,
-        ".write": true,
-        ".validate": "newData.hasChildren(['maxUses', 'used']) && newData.child('maxUses').isNumber() && newData.child('used').isNumber() && newData.child('used').val() >= 0 && newData.child('used').val() <= newData.child('maxUses').val()"
+        ".write": false
+      }
+    },
+    "races": {
+      "$rid": {
+        ".write": "$rid.length <= 12 && !newData.exists()",
+        "k": {
+          ".write": "$rid.length <= 12 && newData.isString() && newData.val().matches(/^[A-Z0-9][A-Z0-9_-]{2,31}$/) && root.child('codes').child(newData.val()).child('expires').val() > now && (!data.exists() || data.val() == newData.val() || !(root.child('codes').child(data.val()).child('expires').val() > now))"
+        },
+        "h": {
+          ".read": "$rid.length <= 12",
+          "$hid": {
+            ".write": "$rid.length <= 12 && $hid.length <= 16 && root.child('codes').child(root.child('races').child($rid).child('k').val()).child('expires').val() > now",
+            ".validate": "newData.hasChildren() || !newData.exists()"
+          }
+        }
       }
     }
   }
 }
 ```
 
-What these rules do: nobody can list races; you can only read or write a race if you know its random race code. Helpers write under `h`. The organizer can delete a race when finished. **Unlock codes** live under `codes/{CODE}` (readable so devices can redeem; each redeem bumps `used`).
+What these rules do:
 
-### Unlock codes (you create these)
+- **Nobody can list or browse the database.** You can only read a race's data (`h`) if you know its random race code.
+- **Nobody can create or change access codes from the app or the web.** Only you can, in the Firebase console (the console ignores rules).
+- **A live race can only be started with a valid access code.** The organizer's phone tags the race with the code (`races/{race}/k`). Helpers and the organizer can only write to a race while that code exists in `codes` and hasn't passed its `expires` time. Without a code, nobody can create races or fill your database with junk.
+- **Helpers never need a code.** They scan the QR and their phones write under `h`, as long as the organizer's code is still valid.
+- Anyone who knows a race's code can still delete that race (the organizer's phone does this when the race ends).
 
-In **Realtime Database → Data**, add a child under `codes` (name = the code users type, **UPPERCASE**, e.g. `MEET-SAT-01`):
+### Access codes (you create these)
+
+In **Realtime Database → Data**, add a child under `codes`. The name is the code people type, **UPPERCASE** letters, numbers, `-` or `_`, 3 to 32 characters. Use something hard to guess, like `MEET-SAT-K7Q2X9`, because anyone who guesses a code can use Live sync until it expires.
 
 | Field | Example | Meaning |
 |--------|---------|--------|
-| `maxUses` | `5` | How many phones may redeem this code |
-| `used` | `0` | Start at 0; the app increments on each redeem |
-| `host` | `true` | Unlocks Invite helpers / Import for a limited time |
-| `live` | `true` or `false` | Whether this code also unlocks Live sync |
-| `hours` | `24` | How long the unlock lasts on that phone |
+| `expires` | `1794718740000` | When the code stops working, as a **number** in milliseconds since 1970 (an "epoch milliseconds" converter on the web will make one from a date and time) |
 
-Example: one Saturday code for 12 coaches, helpers + live, 24 hours:
+Example: a code that works until Saturday Nov 14, 2026 at 11:59 PM Eastern:
 
 ```
 codes/
-  MEET-SAT-01/
-    maxUses: 12
-    used: 0
-    host: true
-    live: true
-    hours: 24
+  MEET-SAT-K7Q2X9/
+    expires: 1794718740000
 ```
 
-Host-only (no live): set `live: false`. When `used` reaches `maxUses`, further redeems fail.
+Notes:
+- Anyone who has the code can use it until it expires. There is no use limit, so only share it with people you trust.
+- A phone that entered a code stops publishing live splits when it expires. A race already running keeps accepting helper splits only until its code expires too, so set `expires` after the end of the meet.
+- To turn a code off early, delete it in the console.
+- Codes from older versions (with `maxUses`, `used`, `host`, `live`, `hours`) don't work anymore. Delete them and create new ones with `expires`.
+- Publish the updated app (step 4) **before** you publish these rules, or phones still running the old version won't be able to use Live sync until they update.
 
 ## 3. Get the config
 1. **Project settings (gear icon) → General → Your apps → Web (`</>`)**, register an app (no hosting needed).
