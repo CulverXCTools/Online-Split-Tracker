@@ -95,7 +95,7 @@ summary{cursor:pointer;margin:8px 0}
 <script>
 const $=s=>document.querySelector(s);
 function newLv(){return{hid:'',dirty:0,ver:0,sig:'',src:{},hts:{},orid:'',o:null}}
-function loadOff(){try{return localStorage.getItem('rst-offline-v1')==='1'}catch(e){return false}}
+function loadOff(){try{const v=localStorage.getItem('rst-offline-v1');return v!=='0'}catch(e){return true}}
 let S={phase:'setup',raceName:'',order:[],pred:[],marks:[],def:{label:'Marker 1',dist:''},total:'',unit:'mi',markers:[],cur:0,start:0,final:0,raf:0,nid:1,rid:'',epoch:0,flash:'',invRid:'',munit:'mi',tdraft:'',hinv:null,hsel:[],hm:[],hc:0,modal:null,draft:null,goals:{},lv:newLv(),offline:loadOff()};
 const M=()=>S.markers[S.cur];
 const mks=()=>S.marks.length?S.marks:[S.def];
@@ -111,7 +111,7 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 const byId=id=>S.order.find(p=>p.id==id);
 const ord=i=>(i+1)+(['st','nd','rd'][i]||'th');
 const timeAt=(mk,id)=>{const i=mk.actual.indexOf(id);return i>=0&&mk.laps[i]!=null?mk.laps[i]:null};
-const KMF=u=>u==='mi'?1.609344:1;
+const KMF=u=>u==='mi'?1.609344:u==='m'?0.001:1;
 const distKm=k=>(+k.dist>0?+k.dist:0)*KMF(k.unit||S.unit);
 const totKm=()=>(+S.total>0?+S.total:0)*KMF(S.unit);
 const relabel=(k,i)=>{const d=String(k.dist).trim();k.label=d!==''?(+d>0?String(+d):d)+' '+(k.unit||S.unit):'Marker '+(i+1)};
@@ -242,8 +242,8 @@ function draw0(){
     <p class="hint">Press and drag ⇅ to put runners in your predicted finishing order (top = first). Optional: type a goal finish time next to a name (16:49 or 16.49).</p>
     <div class="list" id="lst">${S.order.map(p=>`<div class="row" data-id="${p.id}"><span class="h">⇅</span><span class="nm">${esc(p.name)}</span><input class="gi" data-gi="${p.id}" value="${S.goals[p.id]>0?fg(S.goals[p.id]):''}" placeholder="Goal" inputmode="text" autocomplete="off" autocapitalize="off" aria-label="Goal time for ${esc(p.name)}"><button class="x" data-x="${p.id}">×</button></div>`).join('')}</div>
     <h1 style="font-size:16px;margin-top:18px">Markers</h1>
-    <p class="hint">Add each point where you’ll take splits by its distance. Markers are named automatically, and each can use miles or kilometers, so you can mix them.</p>
-    <div class="add"><input id="mdist" type="text" inputmode="decimal" enterkeyhint="done" placeholder="Distance" autocomplete="off" autocapitalize="off"><select id="munit" class="sm"><option value="mi" ${S.munit!=='km'?'selected':''}>mi</option><option value="km" ${S.munit==='km'?'selected':''}>km</option></select><button class="p" id="addmk">Add</button></div>
+    <p class="hint">Add each point where you’ll take splits by its distance. Markers are named automatically, and each can use miles, kilometers, or meters, so you can mix them.</p>
+    <div class="add"><input id="mdist" type="text" inputmode="decimal" enterkeyhint="done" placeholder="Distance" autocomplete="off" autocapitalize="off"><select id="munit" class="sm"><option value="mi" ${S.munit==='mi'?'selected':''}>mi</option><option value="km" ${S.munit==='km'?'selected':''}>km</option><option value="m" ${S.munit==='m'?'selected':''}>m</option></select><button class="p" id="addmk">Add</button></div>
     <div class="tabs" style="flex-wrap:wrap">${S.marks.map((k,i)=>`<button class="tab" data-m="${i}">• ${esc(k.label)} ×</button>`).join('')}</div>
     <button class="p" id="go" style="width:100%;margin-top:6px" ${S.order.length<1?'disabled':''}>Continue</button>
     <p class="cr"><button class="lnk" id="crd">Credits &amp; licenses</button></p>`;
@@ -279,7 +279,7 @@ function draw0(){
     a.innerHTML=`<h1>Total distance</h1>
     <p class="hint">Optional. Used with your markers to estimate each runner’s finish time. Skip it to just record splits.</p>
     <label>Unit</label>
-    <div class="bar"><button class="tab ${S.unit==='mi'?'on':''}" data-u="mi">Miles</button><button class="tab ${S.unit==='km'?'on':''}" data-u="km">Kilometers</button></div>
+    <div class="bar"><button class="tab ${S.unit==='mi'?'on':''}" data-u="mi">Miles</button><button class="tab ${S.unit==='km'?'on':''}" data-u="km">Kilometers</button><button class="tab ${S.unit==='m'?'on':''}" data-u="m">Meters</button></div>
     <label>Total race distance (${S.unit})</label>
     <input id="tot" type="number" step="any" min="0" inputmode="decimal" value="${esc(S.total)}" placeholder="e.g. 3.1">
     <div class="bar" style="margin-top:14px"><button class="s" id="back">← Back</button><button class="p" id="next">Continue</button></div>`;
@@ -322,7 +322,7 @@ function draw0(){
   <div class="bar"><button class="s" id="shr">Share QR</button><button class="s" id="scn">Scan QR</button></div>
   <div class="bar"><button class="s" id="again">New race (same names)</button><button class="s" id="reset">Start over</button></div>`}
   ${tabsHTML(S.markers.map((k,i)=>`<button class="tab ${i===S.cur?'on':''}" data-t="${i}">${esc(k.label)} · ${k.laps.filter(x=>x!=null).length}/${S.order.length}</button>`).join('')+(run?'<button class="tab" id="addm">+ Marker</button>':''))}
-  <div class="add"><input id="dst" type="number" step="any" min="0" inputmode="decimal" value="${esc(m.dist)}" placeholder="Distance of this marker"><select id="unt" class="sm"><option value="mi" ${(m.unit||S.unit)==='mi'?'selected':''}>mi</option><option value="km" ${(m.unit||S.unit)==='km'?'selected':''}>km</option></select></div>
+  <div class="add"><input id="dst" type="number" step="any" min="0" inputmode="decimal" value="${esc(m.dist)}" placeholder="Distance of this marker"><select id="unt" class="sm"><option value="mi" ${(m.unit||S.unit)==='mi'?'selected':''}>mi</option><option value="km" ${(m.unit||S.unit)==='km'?'selected':''}>km</option><option value="m" ${(m.unit||S.unit)==='m'?'selected':''}>m</option></select></div>
   ${run?'':'<p class="hint">Drag names to fix mix-ups. Tap a time to edit it.</p>'}
   ${run&&D>0&&S.order.some(p=>S.goals[p.id]>0)?'<p class="hint">Goal pace: green = comfortably ahead · yellow = ahead but close to falling behind · red = behind goal pace. The number is how far behind (+) or ahead (−) of goal at this marker.</p>':''}
   <div class="grid"><div class="slots">${m.actual.map((_,i)=>`<div class="slot"><b>${ord(i)}</b><span ${m.laps[i]!=null?`data-ti="${i}"`:''}>${m.laps[i]!=null?fmt(m.laps[i]):'—'}</span><small>${i>0&&m.laps[i]!=null&&m.laps[i-1]!=null?'+'+fmt(m.laps[i]-m.laps[i-1]):''}</small></div>`).join('')}</div>
@@ -619,15 +619,17 @@ function xlsxTable(d){
   const mk=d.markers||[],byid=id=>d.order.find(p=>p.id==id);
   const tm=(L,id)=>{const i=(L.actual||[]).indexOf(id);return i>=0&&L.laps[i]!=null?L.laps[i]:null};
   const hasDist=L=>{const n=Number(L.dist);return Number.isFinite(n)&&n>0};
+  const toKm=(n,u)=>{u=u||d.unit||'mi';return n*(u==='mi'?1.609344:u==='m'?0.001:1)};
   // Rows follow the finishing order at the furthest marker (by distance, any unit) that has at least one time.
   let last=-1,bestKm=-1;
-  mk.forEach((L,j)=>{if(hasDist(L)&&(L.laps||[]).some(x=>x!=null)){const km=Number(L.dist)*((L.unit||d.unit||'mi')==='km'?1:1.609344);if(km>=bestKm){bestKm=km;last=j}}});
+  mk.forEach((L,j)=>{if(hasDist(L)&&(L.laps||[]).some(x=>x!=null)){const km=toKm(Number(L.dist),L.unit);if(km>=bestKm){bestKm=km;last=j}}});
   if(last<0)mk.forEach((L,j)=>{if((L.laps||[]).some(x=>x!=null))last=j});
   const base=last>=0?(mk[last].actual||[]).slice():[];
   d.order.forEach(p=>{if(!base.includes(p.id))base.push(p.id)});
-  const normUnit=u=>(u||d.unit||'mi')==='km'?'km':'mi';
-  const dist=L=>{const n=Number(L.dist);if(!Number.isFinite(n)||n<=0)return null;return n*(normUnit(L.unit)==='mi'?1:1/1.609344)};
-  const is5k=()=>{const n=Number(d.total);const km=n*(normUnit(d.unit)==='mi'?1.609344:1);return Math.abs(km-5)<=0.08};
+  // Treat meters with kilometers for export grouping (metric); labels keep original unit via L
+  const normUnit=u=>{u=u||d.unit||'mi';return u==='mi'?'mi':'km'};
+  const dist=L=>{const n=Number(L.dist);if(!Number.isFinite(n)||n<=0)return null;return toKm(n,L.unit)/1.609344};
+  const is5k=()=>{const n=Number(d.total);const km=toKm(n,d.unit);return Math.abs(km-5)<=0.08};
   const points=mk.map((L,i)=>({L,i,mi:dist(L),unit:normUnit(L.unit),timeFor(id){return tm(L,id)}}));
   const timedPoints=points.filter(p=>p.mi!=null);
   // Columns run by distance (nearest first), whatever order the markers were added in, so splits are always later minus earlier.
@@ -701,6 +703,7 @@ function xlsxBytes(d){
         const m=text.match(/([0-9]+(?:\.[0-9]+)?)/);if(!m)return null;
         const n=Number(m[1]);if(!Number.isFinite(n))return null;
         if(/\bkm\b/i.test(text))return n/1.609344;
+        if(/\bm\b/i.test(text)&&!/\bmi\b|mile/i.test(text))return n*0.001/1.609344;
         if(/\bmi\b|mile/i.test(text))return n;
         return null;
       };
@@ -734,6 +737,7 @@ function xlsxBytes(d){
       const m=text.match(/([0-9]+(?:\.[0-9]+)?)/);if(!m)return null;
       const n=Number(m[1]);if(!Number.isFinite(n)||n<=0)return null;
       if(/km/i.test(text))return {km:n,mi:(Math.abs(n-5)<0.001?3.1:n/1.609344)};
+      if(/\bm\b/i.test(text)&&!/mi|mile/i.test(text))return {km:n*0.001,mi:n*0.001/1.609344};
       return /mi|mile/i.test(text)?{km:n*1.609344,mi:n}:null;
     };
     if(h==='AVG/MI'||h==='Avg/K'){
@@ -923,6 +927,9 @@ function importInvite(p,scanAt){
   const keep=S.hinv&&S.hinv.r===p.r&&S.lv.hid;
   S.hinv={r:p.r,o:p.o,mk:p.mk,u:p.u||'',lv:p.lv,A:(scanAt!=null&&p.t!=null)?p.t-scanAt:null};
   S.lv=Object.assign(newLv(),{hid:keep||Math.random().toString(36).slice(2,10),orid:S.lv.orid,src:S.lv.src});
+  // Helper follows the organizer’s live/offline choice; helpers do not pick it themselves
+  S.offline=p.lv===0;
+  try{localStorage.setItem('rst-offline-v1',S.offline?'1':'0')}catch(e){}
   S.hsel=[];S.hm=[];S.hc=0;S.phase='hsetup';S.modal=null;render();
   setFlash(S.hinv.A!=null?'Invite loaded — clock matched':'Invite loaded — clock not matched');return true;
 }
@@ -963,7 +970,7 @@ function hlap(){
 function drawHelper(){
   const a=$('#app'),inv=S.hinv;
   if(S.phase==='hhome'){
-    a.innerHTML=`<h1>Race Split Taker</h1>${modeSeg('help')}${offToggle()}
+    a.innerHTML=`<h1>Race Split Taker</h1>${modeSeg('help')}
     <p class="hint">Helpers time splits for an organizer. Ask the organizer to open <b>Invite helpers</b>, then scan their QR here. You don’t need the race clock — tap <b>Take split</b> each time a runner passes your marker, then drag the names into the order they came by.</p>
     <button class="p" id="hscan" style="width:100%">Scan organizer’s QR</button>
     ${inv?'<button class="s" id="hcont" style="width:100%;margin-top:10px">Continue current helper session</button>':''}
@@ -1006,7 +1013,6 @@ function drawHelper(){
     return `<div class="row" data-id="${id}"><span class="h">⇅</span><span class="nm">${esc(nameOf(id))}<small><span class="gd"></span><span class="hi"></span></small></span></div>`;
   }).join('')}</div></div>
   ${ended?'':'<button class="p" id="hsend" style="width:100%;margin-top:12px">Send to organizer</button>'}
-  <div style="margin-top:12px">${offToggle(false)}</div>
   <div class="bar" style="margin-top:12px"><button class="s" id="hchg" ${ended?'disabled':''}>Change markers</button><button class="s" id="hend">End session</button></div>`;
   if(!ended){
     sortable($('#act'),ids=>{
@@ -1073,7 +1079,7 @@ function liveStatus(){
   if(S.offline||!(h?S.hinv:run)){LV.nc=0;LV.ncs=0}
   if(!fbOK())return{t:'Live sync isn’t set up in this copy of the app — use QR codes.'};
   if(S.offline){
-    if(h)return{t:nTaps()&&S.lv.dirty?'Offline mode — splits stay on this phone. Turn offline mode off to upload them, or use Send to organizer (QR).':'Offline mode — use Send to organizer (QR).'};
+    if(h)return{t:nTaps()&&S.lv.dirty?'Offline mode — splits stay on this phone. Use Send to organizer (QR) to share them.':'Offline mode — use Send to organizer (QR).'};
     return{t:'Offline mode — import helper results with QR codes.'};
   }
   if(LV.err)return{t:'Live sync blocked ('+LV.err+') — the access code may have expired, or the database rules need updating.'};
