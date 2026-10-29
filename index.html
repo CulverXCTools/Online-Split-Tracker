@@ -4,15 +4,16 @@
 <title>Race Split Tracker</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<script>(function(){try{var l=document.querySelector('link[rel="apple-touch-icon"]'),q=matchMedia('(prefers-color-scheme: dark)');function f(){l.href=q.matches?'apple-touch-icon-dark.png':'apple-touch-icon.png'}f();q.addEventListener?q.addEventListener('change',f):q.addListener(f)}catch(e){}})();</script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Splits">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#7a1428">
 <style>
-:root{--bg:#f6f5f1;--card:#fff;--tx:#1b1b1a;--mut:#77756e;--ac:#7a1428;--ln:#e4e2db;--ok:#2b8a3e;--bad:#c92a2a;--wn:#f0b400;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151514;--card:#222220;--tx:#f1efe8;--mut:#a09d92;--ac:#a3243a;--ln:#35342f;--ok:#69db7c;--bad:#ff8787;--wn:#ffd43b;color-scheme:dark}}
-:root[data-theme="dark"]{--bg:#151514;--card:#222220;--tx:#f1efe8;--mut:#a09d92;--ac:#a3243a;--ln:#35342f;--ok:#69db7c;--bad:#ff8787;--wn:#ffd43b;color-scheme:dark}
+:root{--bg:#f6f5f1;--card:#fff;--tx:#1b1b1a;--mut:#77756e;--ac:#7a1428;--act:#7a1428;--ln:#e4e2db;--ok:#2b8a3e;--bad:#c92a2a;--wn:#f0b400;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151514;--card:#222220;--tx:#f1efe8;--mut:#a09d92;--ac:#7a1428;--act:#f1efe8;--ln:#35342f;--ok:#69db7c;--bad:#ff8787;--wn:#ffd43b;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#151514;--card:#222220;--tx:#f1efe8;--mut:#a09d92;--ac:#7a1428;--act:#f1efe8;--ln:#35342f;--ok:#69db7c;--bad:#ff8787;--wn:#ffd43b;color-scheme:dark}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body,button,input,select,label,summary,.tab,.chk,.lap{touch-action:manipulation;-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,Segoe UI,sans-serif}
@@ -28,7 +29,7 @@ h1{font-size:20px;margin:4px 0 12px}h2{font-size:18px;margin:0 0 8px}
 .gd{font-weight:700;color:var(--tx);margin-right:6px}.gd:empty{display:none}
 .row.drag{background:color-mix(in srgb,var(--ac) 16%,var(--card));border-color:var(--ac);box-shadow:0 8px 22px #0005;z-index:5;position:relative}
 .h{touch-action:none;cursor:grab;font-size:22px;color:var(--tx);background:color-mix(in srgb,var(--ln) 60%,transparent);border-radius:10px 0 0 10px;padding:0 12px;height:100%;display:flex;align-items:center;user-select:none;-webkit-user-select:none}
-.row.drag .h{color:var(--ac)}
+.row.drag .h{color:var(--act)}
 .nm{flex:1;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nm small{display:block;font-weight:400;font-size:12px;color:var(--mut);overflow:hidden;text-overflow:ellipsis}
 .x{background:none;border:0;color:var(--mut);font-size:24px;cursor:pointer;padding:0 6px}
@@ -841,7 +842,7 @@ function resumeModal(el){
 function creditsModal(el){
   el.innerHTML=`<div class="ov"><div class="mdl"><h2>Credits &amp; licenses</h2>
   <p class="hint">This app uses these open-source libraries for QR codes:</p>
-  <div class="card"><b>jsQR</b> — QR code scanning<div class="hint" style="margin:2px 0 0">© Cosmo Wolfe and contributors · Apache License 2.0<br><a href="https://github.com/cozmo/jsQR" target="_blank" rel="noopener" style="color:var(--ac)">github.com/cozmo/jsQR</a></div></div>
+  <div class="card"><b>jsQR</b> — QR code scanning<div class="hint" style="margin:2px 0 0">© Cosmo Wolfe and contributors · Apache License 2.0<br><a href="https://github.com/cozmo/jsQR" target="_blank" rel="noopener" style="color:var(--act)">github.com/cozmo/jsQR</a></div></div>
   <div class="card"><b>QRCode for JavaScript</b> — QR code generation<div class="hint" style="margin:2px 0 0">© 2009 Kazuhiko Arase · MIT License<br>Obtained via qrcode-terminal (Gord Tanner &amp; Michael Brooks, Apache License 2.0)</div></div>
   <details><summary>MIT License text</summary><p class="lic">Copyright (c) 2009 Kazuhiko Arase
 
@@ -854,7 +855,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
 
-The full license text is in <a href="THIRD-PARTY-LICENSES.txt" target="_blank" style="color:var(--ac)">THIRD-PARTY-LICENSES.txt</a>.</p></details>
+The full license text is in <a href="THIRD-PARTY-LICENSES.txt" target="_blank" style="color:var(--act)">THIRD-PARTY-LICENSES.txt</a>.</p></details>
   <p class="hint" style="margin-top:10px">"QR Code" is a registered trademark of DENSO WAVE INCORPORATED.</p>
   <div class="bar" style="margin-top:12px"><button class="s" id="mc">Close</button></div></div></div>`;
   $('#mc').onclick=()=>{S.modal=null;render()};
