@@ -1,5 +1,5 @@
-const CACHE='rst-v23';
-const FILES=['./','index.html','firebase-config.js','qrgen.js','jsQR.js','THIRD-PARTY-LICENSES.txt','manifest.webmanifest','icon-192.png','icon-512.png','icon-512-maskable.png','apple-touch-icon.png','apple-touch-icon-dark.png'];
+const CACHE='rst-v24';
+const FILES=['./','index.html','firebase-config.js','qrgen.js','jsQR.js','THIRD-PARTY-LICENSES.txt','manifest.webmanifest','icon-192.png','icon-512.png','icon-512-maskable.png','apple-touch-icon.png'];
 // Firebase's scripts live on Google's servers. They're saved here too so live sync still starts when the phone has no signal.
 // Keep the version in step with FBV in index.html.
 const EXTRA=['https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js','https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js'];
