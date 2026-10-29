@@ -11,8 +11,8 @@
 <meta name="theme-color" content="#7a1428">
 <style>
 :root{--bg:#f6f5f1;--card:#fff;--tx:#1b1b1a;--mut:#77756e;--ac:#7a1428;--ln:#e4e2db;--ok:#2b8a3e;--bad:#c92a2a;--wn:#f0b400;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151514;--card:#222220;--tx:#f1efe8;--mut:#a09d92;--ac:#c13a55;--ln:#35342f;--ok:#69db7c;--bad:#ff8787;--wn:#ffd43b;color-scheme:dark}}
-:root[data-theme="dark"]{--bg:#151514;--card:#222220;--tx:#f1efe8;--mut:#a09d92;--ac:#c13a55;--ln:#35342f;--ok:#69db7c;--bad:#ff8787;--wn:#ffd43b;color-scheme:dark}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151514;--card:#222220;--tx:#f1efe8;--mut:#a09d92;--ac:#a3243a;--ln:#35342f;--ok:#69db7c;--bad:#ff8787;--wn:#ffd43b;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#151514;--card:#222220;--tx:#f1efe8;--mut:#a09d92;--ac:#a3243a;--ln:#35342f;--ok:#69db7c;--bad:#ff8787;--wn:#ffd43b;color-scheme:dark}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body,button,input,select,label,summary,.tab,.chk,.lap{touch-action:manipulation;-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,Segoe UI,sans-serif}
@@ -462,7 +462,9 @@ async function redeemUnlockCode(raw){
   if(!FB.conn)throw new Error('No connection — try again online');
   let snap;
   try{
-    snap=await FB.db.ref('codes/'+code).once('value');
+    // get() asks the server first (once() can answer from a stale local copy), so an extended code is seen right away.
+    const cref=FB.db.ref('codes/'+code);
+    snap=await (typeof cref.get==='function'?cref.get():cref.once('value'));
   }catch(e){
     if((e&&e.code)==='PERMISSION_DENIED')throw new Error('Database rules block codes — publish the rules from FIREBASE-SETUP.md');
     throw new Error((e&&e.message)||'Could not read code');
@@ -471,7 +473,8 @@ async function redeemUnlockCode(raw){
   const d=snap.val()||{};
   const until=+d.expires||0;
   const nowS=Date.now()+(+FB.so||0);
-  if(!(until>nowS))throw new Error('This code has expired');
+  if(!(until>0))throw new Error('This code has no expiry time — add an expires number to it in Firebase');
+  if(!(until>nowS))throw new Error('This code expired '+new Date(until-(+FB.so||0)).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+'. If you just extended it, check that expires is a number with 13 digits (milliseconds).');
   lsSet('rst-live-code',code);
   setLiveUntil(until-(+FB.so||0));
   return{until};
@@ -1181,10 +1184,10 @@ async function liveFlush(){
 // Each live race is tagged with the organizer's access code (races/{rid}/k, not readable by helpers).
 // The database rules only accept helper and organizer writes for a race whose code exists and hasn't expired.
 function ensureRaceKey(rid){
-  if(LV.krid===rid)return Promise.resolve();
-  const code=liveCode();
+  const code=liveCode(),key=rid+'|'+code;
+  if(LV.krid===key)return Promise.resolve();
   if(!code)return Promise.reject({code:'PERMISSION_DENIED'});
-  return FB.db.ref('races/'+rid+'/k').set(code).then(()=>{LV.krid=rid});
+  return FB.db.ref('races/'+rid+'/k').set(code).then(()=>{LV.krid=key});
 }
 function oCore(){
   const g={};S.order.forEach(p=>{if(S.goals[p.id]>0)g[p.id]=S.goals[p.id]});
@@ -1198,7 +1201,7 @@ function orgPublish(force){
   if(!hasLive())return;
   if(!(S.phase==='race'||S.phase==='done')||!S.rid||!FB.db||S.offline)return;
   const d=JSON.stringify(oCore());
-  if(!force&&d===LV.osent&&LV.srid===S.rid)return;
+  if(!force&&d===LV.osent&&LV.srid===S.rid&&LV.krid===S.rid+'|'+liveCode())return;
   clearTimeout(LV.ot);
   const attempt=()=>{
     const rid=S.rid;
