@@ -29,6 +29,7 @@ h1{font-size:20px;margin:4px 0 12px}h2{font-size:18px;margin:0 0 8px}
 .row.drag{background:color-mix(in srgb,var(--ac) 16%,var(--card));border-color:var(--ac);box-shadow:0 8px 22px #0005;z-index:5;position:relative}
 .h{touch-action:none;cursor:grab;font-size:22px;color:var(--tx);background:color-mix(in srgb,var(--ln) 60%,transparent);border-radius:10px 0 0 10px;padding:0 12px;height:100%;display:flex;align-items:center;user-select:none;-webkit-user-select:none}
 .row.drag .h{color:var(--act)}
+.row.mr{padding-left:14px}
 .nm{flex:1;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nm small{display:block;font-weight:400;font-size:12px;color:var(--mut);overflow:hidden;text-overflow:ellipsis}
 .x{background:none;border:0;color:var(--mut);font-size:24px;cursor:pointer;padding:0 6px}
@@ -242,9 +243,9 @@ function draw0(){
     <p class="hint">Press and drag ⇅ to put runners in your predicted finishing order (top = first). Optional: type a goal finish time next to a name (16:49 or 16.49).</p>
     <div class="list" id="lst">${S.order.map(p=>`<div class="row" data-id="${p.id}"><span class="h">⇅</span><span class="nm">${esc(p.name)}</span><input class="gi" data-gi="${p.id}" value="${S.goals[p.id]>0?fg(S.goals[p.id]):''}" placeholder="Goal" inputmode="text" autocomplete="off" autocapitalize="off" aria-label="Goal time for ${esc(p.name)}"><button class="x" data-x="${p.id}">×</button></div>`).join('')}</div>
     <h1 style="font-size:16px;margin-top:18px">Markers</h1>
-    <p class="hint">Add each point where you’ll take splits by its distance. Markers are named automatically, and each can use miles, kilometers, or meters, so you can mix them.</p>
+    <p class="hint">Add each point where you’ll take splits by its distance. They sort themselves, and you can mix miles, kilometers, and meters.</p>
     <div class="add"><input id="mdist" type="text" inputmode="decimal" enterkeyhint="done" placeholder="Distance" autocomplete="off" autocapitalize="off"><select id="munit" class="sm"><option value="mi" ${S.munit==='mi'?'selected':''}>mi</option><option value="km" ${S.munit==='km'?'selected':''}>km</option><option value="m" ${S.munit==='m'?'selected':''}>m</option></select><button class="p" id="addmk">Add</button></div>
-    <div class="tabs" style="flex-wrap:wrap">${S.marks.map((k,i)=>`<button class="tab" data-m="${i}">• ${esc(k.label)} ×</button>`).join('')}</div>
+    <div class="list" id="mlst">${S.marks.map((k,i)=>`<div class="row mr"><span class="nm">${esc(k.label)}</span><button class="x" data-m="${i}" aria-label="Remove ${esc(k.label)}">×</button></div>`).join('')}</div>
     <button class="p" id="go" style="width:100%;margin-top:6px" ${S.order.length<1?'disabled':''}>Continue</button>
     <p class="cr"><button class="lnk" id="crd">Credits &amp; licenses</button></p>`;
     const refocus=id=>{requestAnimationFrame(()=>{const el=$(id);if(!el)return;el.focus();try{el.setSelectionRange&&el.setSelectionRange(0,el.value.length)}catch(e){}})};
@@ -265,7 +266,9 @@ function draw0(){
       const v=$('#mdist').value.trim().replace(',','.');
       if(!(+v>0))return;
       const k={dist:String(+v),unit:$('#munit').value};
-      relabel(k,0);S.munit=k.unit;S.marks.push(k);S.marks.sort((x,y)=>distKm(x)-distKm(y));
+      relabel(k,0);S.munit=k.unit;
+      if(S.marks.some(x=>Math.abs(distKm(x)-distKm(k))<1e-9)){setFlash('Already added');render();refocus('#mdist');return}
+      S.marks.push(k);S.marks.sort((x,y)=>distKm(x)-distKm(y));
       render();refocus('#mdist');
     };
     $('#addmk').onclick=addMk;
