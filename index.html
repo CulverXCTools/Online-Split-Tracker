@@ -274,19 +274,25 @@ function draw0(){
     // Same flow as names: Enter or Add, clear field via re-render, keep focus for the next marker
     const bindX=()=>a.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{S.marks.splice(+b.dataset.m,1);render()});
     const addMk=()=>{
-      // Update the list in place instead of re-rendering the page: the field keeps focus, so the keypad stays up for the next marker.
+      // Update the list in place (no full re-render) so the field keeps focus and the keypad stays up.
       const inp=$('#mdist'),v=inp.value.trim().replace(',','.');
-      // Bring the keypad up first, while still inside the tap (iOS only allows it then). If the field is still "focused" but the keypad was dismissed, blur it first so focus() really reopens it.
-      const kbOpen=window.visualViewport&&window.visualViewport.height<window.innerHeight-120;
-      if(document.activeElement===inp&&!kbOpen)inp.blur();
-      inp.focus();
-      if(!(+v>0))return;
+      if(!(+v>0)){
+        // Empty/invalid: only reopen keypad if it was dismissed (iOS needs focus inside the gesture).
+        if(document.activeElement!==inp)inp.focus({preventScroll:true});
+        return;
+      }
       const k={dist:String(+v),unit:$('#munit').value};
       relabel(k,0);S.munit=k.unit;
       if(S.marks.some(x=>Math.abs(distKm(x)-distKm(k))<1e-9)){setFlash('Already added');inp.select();return}
       S.marks.push(k);S.marks.sort((x,y)=>distKm(x)-distKm(y));
+      // Freeze scroll while the list grows so iOS doesn't bounce the page to keep the input in view.
+      const sy=window.scrollY,sx=window.scrollX;
       $('#mlst').innerHTML=marksHTML();bindX();
-      inp.value='';inp.focus();
+      inp.value='';
+      window.scrollTo(sx,sy);
+      // Stay on the field without triggering scroll-into-view (prevents the up-then-down bounce).
+      if(document.activeElement!==inp)inp.focus({preventScroll:true});
+      try{inp.setSelectionRange(0,0)}catch(e){}
       saveState();liveTick();
     };
     $('#addmk').onmousedown=e=>e.preventDefault(); // tapping Add shouldn't pull focus (and the keypad) away from the field
