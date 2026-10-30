@@ -96,6 +96,7 @@ summary{cursor:pointer;margin:8px 0}
 <script>
 const $=s=>document.querySelector(s);
 function newLv(){return{hid:'',dirty:0,ver:0,sig:'',src:{},hts:{},orid:'',o:null}}
+let orgOff=null; // this phone's own Offline-mode choice as an organizer; helpers never read or change it
 function loadOff(){try{const v=localStorage.getItem('rst-offline-v1');return v!=='0'}catch(e){return true}}
 let S={phase:'setup',raceName:'',order:[],pred:[],marks:[],def:{label:'Marker 1',dist:''},total:'',unit:'mi',markers:[],cur:0,start:0,final:0,raf:0,nid:1,rid:'',epoch:0,flash:'',invRid:'',munit:'mi',tdraft:'',hinv:null,hsel:[],hm:[],hc:0,modal:null,draft:null,goals:{},lv:newLv(),offline:loadOff()};
 const M=()=>S.markers[S.cur];
@@ -229,7 +230,11 @@ function initTabs(sl){
   upd();
 }
 let lastPh=null;
-function draw(){const old=$('#mtabs'),sl=old?old.scrollLeft:0;draw0();
+function draw(){const old=$('#mtabs'),sl=old?old.scrollLeft:0;
+  // A helper is always in whatever mode the organizer started with (from the invite), on every screen and after a reload.
+  if(orgOff===null)orgOff=loadOff();
+  S.offline=(isH()&&S.hinv)?S.hinv.lv===0:orgOff;
+  draw0();
   // Moving to a different screen (Continue, Back, Start race…) starts at the top instead of wherever the last screen was scrolled to.
   if(lastPh!==null&&S.phase!==lastPh)window.scrollTo(0,0);lastPh=S.phase;
   liveBadge();bindOff();if(S.phase==='htime')hUpdate(true);initTabs(sl)}
@@ -240,7 +245,7 @@ function draw0(){
   const a=$('#app');
   if(S.phase==='setup'){
     a.innerHTML=`<h1>Race Split Taker</h1>
-    ${modeSeg('org')}${offToggle()}${unlockTimeHTML()}
+    ${modeSeg('org')}
     <label for="racename">Race name</label><input id="racename" value="${esc(S.raceName||'')}" placeholder="e.g. County Championships" autocomplete="off">
     <div class="bar"><button class="s" id="scn">Import splits</button><button class="s" id="hst">Saved races</button></div>
     <div class="bar"><button class="s" id="tms">Team presets</button></div>
@@ -310,6 +315,7 @@ function draw0(){
     <p class="hint">Check the line-up and markers, then start the clock.</p>
     <div class="card"><b>Predicted order</b><ol>${S.order.map(p=>`<li>${esc(p.name)}${S.goals[p.id]>0?` <span class="hint" style="margin:0">· goal ${fg(S.goals[p.id])}</span>`:''}</li>`).join('')}</ol></div>
     <div class="card"><b>Markers</b>${S.total!==''?`<div class="hint" style="margin:2px 0 0">Total ${esc(S.total)} ${S.unit}</div>`:''}<ol>${mks().map(k=>`<li>${esc(k===S.def&&+S.total>0?S.total+' '+S.unit:k.label)}</li>`).join('')}</ol></div>
+    ${offToggle()}${unlockTimeHTML()}
     <button class="p lap" id="start">Start race</button>
     <button class="s" id="back" style="width:100%">← Back to edit</button>
     <div class="bar" style="margin-top:12px"><button class="s" id="shr">Share QR</button><button class="s" id="scn">Scan QR</button></div>`;
@@ -439,8 +445,8 @@ setInterval(()=>{const e=$('#ult');if(!e)return;const u=unlockTime();e.textConte
 function showLivePaywall(){S.modal={type:'host',reason:'live'};render()}
 function hostPaywallModal(el){
   const left=unlockLeftHint();
-  el.innerHTML=`<div class="ov"><div class="mdl"><h2>Live sync</h2>
-  <p class="hint">Live sync publishes this race online so helpers update in real time. It needs an access code so the database isn’t open to everyone.</p>
+  el.innerHTML=`<div class="ov"><div class="mdl"><h2>Live hosting</h2>
+  <p class="hint">Live hosting publishes this race online so helpers update in real time. It needs an access code so the database isn’t open to everyone.</p>
   <div class="card"><b>No code needed for the rest</b><div class="hint" style="margin:4px 0 0">Inviting helpers (QR), importing helper results, and the Helper tab all work without a code. Helpers never need one.</div></div>
   ${left?`<p class="hint">${esc(left)}</p>`:''}
   <label for="ulcode">Access code</label>
@@ -854,7 +860,7 @@ function resumeModal(el){
     SAVE_OK=true;render();setFlash('Race discarded — names kept');
     if(o.rid)liveRemoveRace(o.rid).then(r=>{
       if(r.ok)setFlash('Race discarded — names kept · live data cleared');
-      else if(r.why==='offline')setFlash('Race discarded — Offline mode is on, so its live data was not cleared');
+      else if(r.why==='offline')setFlash('Race discarded — Live hosting is off, so its live data was not cleared');
       else if(r.why==='error')setFlash('Race discarded — could not clear its live data');
     });
   };
@@ -945,8 +951,7 @@ function importInvite(p,scanAt){
   S.hinv={r:p.r,o:p.o,mk:p.mk,u:p.u||'',lv:p.lv,A:(scanAt!=null&&p.t!=null)?p.t-scanAt:null};
   S.lv=Object.assign(newLv(),{hid:keep||Math.random().toString(36).slice(2,10),orid:S.lv.orid,src:S.lv.src});
   // Helper follows the organizer’s live/offline choice; helpers do not pick it themselves
-  S.offline=p.lv===0;
-  try{localStorage.setItem('rst-offline-v1',S.offline?'1':'0')}catch(e){}
+  S.offline=p.lv===0; // (not saved: this phone's own organizer setting stays untouched)
   S.hsel=[];S.hm=[];S.hc=0;S.phase='hsetup';S.modal=null;render();
   setFlash(S.hinv.A!=null?'Invite loaded — clock matched':'Invite loaded — clock not matched');return true;
 }
@@ -1071,18 +1076,19 @@ function setOffline(v){
   // Organizer turning Live on requires an access code (helpers never need one; QR needs none)
   if(!v&&!isH()&&!hasLive()){
     showLivePaywall();
-    const c=$('#offm');if(c)c.checked=true;
+    const c=$('#offm');if(c)c.checked=false;
     return;
   }
-  S.offline=!!v;
+  if(isH())return; // helpers follow the organizer's invite
+  S.offline=orgOff=!!v;
   try{localStorage.setItem('rst-offline-v1',v?'1':'0')}catch(e){}
   render();
-  setFlash(v?'Offline mode on — use QR codes':fbOK()?'Live sync on':'Live sync isn’t set up yet');
+  setFlash(v?'Live hosting off — use QR codes':fbOK()?'Live hosting on':'Live sync isn’t set up yet');
 }
 function offToggle(withStatus){
-  return `<label class="chk"><input type="checkbox" id="offm" ${S.offline?'checked':''}><span>Offline mode (no internet, QR only)</span></label>`+(withStatus===false?'':`<p class="hint" id="lvs">${esc(liveStatus().t)}</p>`);
+  return `<label class="chk"><input type="checkbox" id="offm" ${S.offline?'':'checked'}><span>Live hosting</span></label><p class="hint">Live hosting lets helpers see the real race time, and lets you see results as they come in.</p>`+(withStatus===false?'':`<p class="hint" id="lvs">${esc(liveStatus().t)}</p>`);
 }
-function bindOff(){const c=$('#offm');if(c)c.onchange=()=>setOffline(c.checked)}
+function bindOff(){const c=$('#offm');if(c)c.onchange=()=>setOffline(!c.checked)}
 function liveBadge(){
   if(!(S.phase==='race'||S.phase==='done'||S.phase==='htime'))return;
   const h=document.querySelector('#app h1');if(!h)return;
@@ -1096,11 +1102,11 @@ function liveStatus(){
   if(S.offline||!(h?S.hinv:run)){LV.nc=0;LV.ncs=0}
   if(!fbOK())return{t:'Live sync isn’t set up in this copy of the app — use QR codes.'};
   if(S.offline){
-    if(h)return{t:nTaps()&&S.lv.dirty?'Offline mode — splits stay on this phone. Use Send to organizer (QR) to share them.':'Offline mode — use Send to organizer (QR).'};
-    return{t:'Offline mode — import helper results with QR codes.'};
+    if(h)return{t:nTaps()&&S.lv.dirty?'Live hosting is off — splits stay on this phone. Use Send to organizer (QR) to share them.':'Live hosting is off — use Send to organizer (QR).'};
+    return{t:'Live hosting is off — import helper results with QR codes.'};
   }
   if(LV.err)return{t:'Live sync blocked ('+LV.err+') — the access code may have expired, or the database rules need updating.'};
-  if(!h&&!hasLive())return{t:'Live sync needs an access code on this phone — helpers and QR codes work without one. Uncheck Offline mode and enter a code to publish.'};
+  if(!h&&!hasLive())return{t:'Live hosting needs an access code on this phone — helpers and QR codes work without one. Enter a code to turn it on.'};
   if(!h&&!run)return{t:'Live sync on — helper splits arrive automatically once the race starts. QR still works too.'};
   if(h&&!S.hinv)return{t:'Live sync on — scan the organizer’s invite and your splits upload automatically.'};
   if(!FB.db||!FB.conn){
@@ -1354,7 +1360,7 @@ function hUpdate(force){
   if(!slow&&!(f&&!f.textContent))return;
   HO.lr=t;
   if(f){
-    if(!HO.m)f.textContent=(!fbOK()||S.offline)?'No stopwatch in offline mode — times are matched when you Send to organizer.':LV.err?'Can’t get race info ('+LV.err+') — check the database rules.':S.hinv.lv===0?'The organizer is in offline mode, so there’s no live stopwatch.':FB.conn?'Waiting for race info from the organizer’s phone — it arrives once the organizer starts the race.':'No connection — the stopwatch starts when you’re back online.';
+    if(!HO.m)f.textContent=(!fbOK()||S.offline)?'No stopwatch without live hosting — times are matched when you Send to organizer.':LV.err?'Can’t get race info ('+LV.err+') — check the database rules.':S.hinv.lv===0?'The organizer is not using live hosting, so there’s no live stopwatch.':FB.conn?'Waiting for race info from the organizer’s phone — it arrives once the organizer starts the race.':'No connection — the stopwatch starts when you’re back online.';
     else f.textContent=withOrg(()=>{
       const u=S.unit;
       return[S.phase==='done'?'Race finished':'',+S.total>0?S.total+' '+u+' total':''].filter(Boolean).join(' · ');
