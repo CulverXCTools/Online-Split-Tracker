@@ -230,6 +230,7 @@ function initTabs(sl){
 }
 function draw(){const old=$('#mtabs'),sl=old?old.scrollLeft:0;draw0();liveBadge();bindOff();if(S.phase==='htime')hUpdate(true);initTabs(sl)}
 window.addEventListener('resize',()=>{const w=$('#tw'),sc=$('#mtabs');if(w&&sc){w.classList.toggle('cl',sc.scrollLeft>2);w.classList.toggle('cr',sc.scrollLeft+sc.clientWidth<sc.scrollWidth-2)}});
+const marksHTML=()=>S.marks.map((k,i)=>`<div class="row mr"><span class="nm">${esc(k.label)}</span><button class="x" data-m="${i}" aria-label="Remove ${esc(k.label)}">×</button></div>`).join('');
 function draw0(){
   if(S.phase[0]==='h')return drawHelper();
   const a=$('#app');
@@ -244,8 +245,8 @@ function draw0(){
     <div class="list" id="lst">${S.order.map(p=>`<div class="row" data-id="${p.id}"><span class="h">⇅</span><span class="nm">${esc(p.name)}</span><input class="gi" data-gi="${p.id}" value="${S.goals[p.id]>0?fg(S.goals[p.id]):''}" placeholder="Goal" inputmode="text" autocomplete="off" autocapitalize="off" aria-label="Goal time for ${esc(p.name)}"><button class="x" data-x="${p.id}">×</button></div>`).join('')}</div>
     <h1 style="font-size:16px;margin-top:18px">Markers</h1>
     <p class="hint">Add each point where you’ll take splits by its distance. They sort themselves, and you can mix miles, kilometers, and meters.</p>
-    <div class="add"><input id="mdist" type="text" inputmode="decimal" enterkeyhint="done" placeholder="Distance" autocomplete="off" autocapitalize="off"><select id="munit" class="sm"><option value="mi" ${S.munit==='mi'?'selected':''}>mi</option><option value="km" ${S.munit==='km'?'selected':''}>km</option><option value="m" ${S.munit==='m'?'selected':''}>m</option></select><button class="p" id="addmk">Add</button></div>
-    <div class="list" id="mlst">${S.marks.map((k,i)=>`<div class="row mr"><span class="nm">${esc(k.label)}</span><button class="x" data-m="${i}" aria-label="Remove ${esc(k.label)}">×</button></div>`).join('')}</div>
+    <div class="add"><input id="mdist" type="text" inputmode="decimal" placeholder="Distance" autocomplete="off" autocapitalize="off"><select id="munit" class="sm"><option value="mi" ${S.munit==='mi'?'selected':''}>mi</option><option value="km" ${S.munit==='km'?'selected':''}>km</option><option value="m" ${S.munit==='m'?'selected':''}>m</option></select><button class="p" id="addmk">Add</button></div>
+    <div class="list" id="mlst">${marksHTML()}</div>
     <button class="p" id="go" style="width:100%;margin-top:6px" ${S.order.length<1?'disabled':''}>Continue</button>
     <p class="cr"><button class="lnk" id="crd">Credits &amp; licenses</button></p>`;
     const refocus=id=>{requestAnimationFrame(()=>{const el=$(id);if(!el)return;el.focus();try{el.setSelectionRange&&el.setSelectionRange(0,el.value.length)}catch(e){}})};
@@ -262,19 +263,28 @@ function draw0(){
     });
     sortable($('#lst'),ids=>{S.order=ids.map(byId);render()});
     // Same flow as names: Enter or Add, clear field via re-render, keep focus for the next marker
+    const bindX=()=>a.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{S.marks.splice(+b.dataset.m,1);render()});
     const addMk=()=>{
-      const v=$('#mdist').value.trim().replace(',','.');
+      // Update the list in place instead of re-rendering the page: the field keeps focus, so the keypad stays up for the next marker.
+      const inp=$('#mdist'),v=inp.value.trim().replace(',','.');
+      // Bring the keypad up first, while still inside the tap (iOS only allows it then). If the field is still "focused" but the keypad was dismissed, blur it first so focus() really reopens it.
+      const kbOpen=window.visualViewport&&window.visualViewport.height<window.innerHeight-120;
+      if(document.activeElement===inp&&!kbOpen)inp.blur();
+      inp.focus();
       if(!(+v>0))return;
       const k={dist:String(+v),unit:$('#munit').value};
       relabel(k,0);S.munit=k.unit;
-      if(S.marks.some(x=>Math.abs(distKm(x)-distKm(k))<1e-9)){setFlash('Already added');render();refocus('#mdist');return}
+      if(S.marks.some(x=>Math.abs(distKm(x)-distKm(k))<1e-9)){setFlash('Already added');inp.select();return}
       S.marks.push(k);S.marks.sort((x,y)=>distKm(x)-distKm(y));
-      render();refocus('#mdist');
+      $('#mlst').innerHTML=marksHTML();bindX();
+      inp.value='';inp.focus();
+      saveState();liveTick();
     };
+    $('#addmk').onmousedown=e=>e.preventDefault(); // tapping Add shouldn't pull focus (and the keypad) away from the field
     $('#addmk').onclick=addMk;
     $('#mdist').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();addMk()}};
     $('#munit').onchange=e=>{S.munit=e.target.value};
-    a.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{S.marks.splice(+b.dataset.m,1);render()});
+    bindX();
     $('#go').onclick=()=>{S.phase='dist';render()};
     return;
   }
