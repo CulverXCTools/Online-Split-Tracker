@@ -228,7 +228,11 @@ function initTabs(sl){
   $('#tabr').onclick=()=>sc.scrollBy({left:sc.clientWidth*0.6,behavior:'smooth'});
   upd();
 }
-function draw(){const old=$('#mtabs'),sl=old?old.scrollLeft:0;draw0();liveBadge();bindOff();if(S.phase==='htime')hUpdate(true);initTabs(sl)}
+let lastPh=null;
+function draw(){const old=$('#mtabs'),sl=old?old.scrollLeft:0;draw0();
+  // Moving to a different screen (Continue, Back, Start race…) starts at the top instead of wherever the last screen was scrolled to.
+  if(lastPh!==null&&S.phase!==lastPh)window.scrollTo(0,0);lastPh=S.phase;
+  liveBadge();bindOff();if(S.phase==='htime')hUpdate(true);initTabs(sl)}
 window.addEventListener('resize',()=>{const w=$('#tw'),sc=$('#mtabs');if(w&&sc){w.classList.toggle('cl',sc.scrollLeft>2);w.classList.toggle('cr',sc.scrollLeft+sc.clientWidth<sc.scrollWidth-2)}});
 const marksHTML=()=>S.marks.map((k,i)=>`<div class="row mr"><span class="nm">${esc(k.label)}</span><button class="x" data-m="${i}" aria-label="Remove ${esc(k.label)}">×</button></div>`).join('');
 function draw0(){
