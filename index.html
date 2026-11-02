@@ -98,7 +98,7 @@ const $=s=>document.querySelector(s);
 function newLv(){return{hid:'',dirty:0,ver:0,sig:'',src:{},hts:{},orid:'',o:null}}
 let orgOff=null; // this phone's own Offline-mode choice as an organizer; helpers never read or change it
 function loadOff(){try{const v=localStorage.getItem('rst-offline-v1');return v!=='0'}catch(e){return true}}
-let S={phase:'setup',raceName:'',order:[],pred:[],marks:[],def:{label:'Marker 1',dist:''},total:'',unit:'mi',markers:[],cur:0,start:0,final:0,raf:0,nid:1,rid:'',epoch:0,flash:'',invRid:'',munit:'mi',tdraft:'',hinv:null,hsel:[],hm:[],hc:0,modal:null,draft:null,goals:{},lv:newLv(),offline:loadOff()};
+let S={phase:'setup',raceName:'',order:[],pred:[],marks:[],def:{label:'Marker 1',dist:''},total:'',unit:'mi',markers:[],cur:0,start:0,final:0,raf:0,nid:1,rid:'',epoch:0,flash:'',invRid:'',munit:'mi',tdraft:'',hinv:null,hsel:[],hm:[],hc:0,modal:null,draft:null,goals:{},lv:newLv(),offline:loadOff(),raceLiveCode:'',raceLiveUntil:0};
 const M=()=>S.markers[S.cur];
 const mks=()=>S.marks.length?S.marks:[S.def];
 const fmt=ms=>{const t=Math.floor(ms/10),c=t%100,s=Math.floor(t/100)%60,m=Math.floor(t/6000);return m+':'+String(s).padStart(2,'0')+'.'+String(c).padStart(2,'0')};
@@ -335,6 +335,8 @@ function draw0(){
     <button class="s" id="back" style="width:100%">← Back to edit</button>
     <div class="bar" style="margin-top:12px"><button class="s" id="shr">Share QR</button><button class="s" id="scn">Scan QR</button></div>`;
     $('#start').onclick=startRace;$('#back').onclick=()=>{S.phase='dist';render()};bindSync();
+    // Verify the access code against Firebase now so a deleted code is fixed before the gun goes off
+    if(!S.offline&&hasLive())checkLiveCode({force:true,openPaywall:true});
     return;
   }
   const run=S.phase==='race',m=M(),n=m.actual.length,full=m.laps.length>=n;
@@ -835,7 +837,7 @@ function copyTable(d){
 }
 const getHist=()=>{try{return JSON.parse(localStorage.getItem('rst-history-v1')||'[]')}catch(e){return[]}};
 const histTitle=e=>new Date(e.epoch||e.saved).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+' · '+e.order.length+' runners';
-const snapOf=()=>({phase:S.phase,raceName:S.raceName||'',order:S.order,pred:S.pred,marks:S.marks,def:S.def,total:S.total,unit:S.unit,markers:S.markers,cur:S.cur,final:S.final,nid:S.nid,rid:S.rid,epoch:S.epoch,invRid:S.invRid,hinv:S.hinv,hsel:S.hsel,hm:S.hm,hc:S.hc,goals:S.goals,lv:S.lv,lc:S.liveCleared?1:0,saved:Date.now()});
+const snapOf=()=>({phase:S.phase,raceName:S.raceName||'',order:S.order,pred:S.pred,marks:S.marks,def:S.def,total:S.total,unit:S.unit,markers:S.markers,cur:S.cur,final:S.final,nid:S.nid,rid:S.rid,epoch:S.epoch,invRid:S.invRid,hinv:S.hinv,hsel:S.hsel,hm:S.hm,hc:S.hc,goals:S.goals,lv:S.lv,lc:S.liveCleared?1:0,rlc:S.raceLiveCode||'',rlu:S.raceLiveUntil||0,saved:Date.now()});
 function saveState(){
   if(!SAVE_OK)return;
   try{
@@ -849,7 +851,7 @@ function saveState(){
 }
 function loadSnap(o){
   cancelAnimationFrame(S.raf);
-  Object.assign(S,{phase:o.phase,raceName:o.raceName||'',order:o.order||[],pred:o.pred||[],marks:o.marks||[],def:o.def||{label:'Marker 1',dist:''},total:o.total||'',unit:o.unit||'mi',goals:o.goals||{},markers:o.markers||[],cur:Math.min(o.cur||0,Math.max(0,(o.markers||[]).length-1)),final:o.final||0,nid:o.nid||1,rid:o.rid||'',epoch:o.epoch||0,invRid:o.invRid||'',hinv:o.hinv||null,hsel:o.hsel||[],hm:o.hm||[],hc:o.hc||0,lv:Object.assign(newLv(),o.lv||{}),modal:null,liveCleared:!!o.lc});
+  Object.assign(S,{phase:o.phase,raceName:o.raceName||'',order:o.order||[],pred:o.pred||[],marks:o.marks||[],def:o.def||{label:'Marker 1',dist:''},total:o.total||'',unit:o.unit||'mi',goals:o.goals||{},markers:o.markers||[],cur:Math.min(o.cur||0,Math.max(0,(o.markers||[]).length-1)),final:o.final||0,nid:o.nid||1,rid:o.rid||'',epoch:o.epoch||0,invRid:o.invRid||'',hinv:o.hinv||null,hsel:o.hsel||[],hm:o.hm||[],hc:o.hc||0,lv:Object.assign(newLv(),o.lv||{}),modal:null,liveCleared:!!o.lc,raceLiveCode:o.rlc||'',raceLiveUntil:o.rlu||0});
   // A finished race that is loaded back (after a restart, or from Saved races) is never re-published to the database.
   LV.reap=o.phase==='done'?(o.rid||''):'';
   if(S.phase==='race')S.start=performance.now()-(Date.now()-S.epoch);
@@ -1090,19 +1092,86 @@ function clearLiveCreds(){
   setLiveUntil(0);
   LV.krid='';
 }
+// Ask Firebase whether the stored access code still exists and is unexpired.
+// Used on the Ready screen and before Start so a deleted code is caught before the race, not mid-race.
+const LV_CHECK={t:0,inflight:null,code:''};
+async function checkLiveCode(opts){
+  opts=opts||{};
+  if(isH()||S.offline||!fbOK()||!hasLive())return true;
+  const code=liveCode();
+  if(!opts.force&&LV_CHECK.inflight)return LV_CHECK.inflight;
+  if(!opts.force&&LV_CHECK.code===code&&Date.now()-LV_CHECK.t<30000)return true;
+  const run=async()=>{
+    try{
+      if(!(await ensureFB())||!FB.db)return true; // offline — can't verify; leave local code alone
+      if(!FB.conn){
+        await new Promise(ok=>{let n=0;const t=setInterval(()=>{if(FB.conn||++n>20){clearInterval(t);ok()}},100)});
+      }
+      if(!FB.conn)return true;
+      const cref=FB.db.ref('codes/'+code);
+      const snap=await (typeof cref.get==='function'?cref.get():cref.once('value'));
+      LV_CHECK.t=Date.now();LV_CHECK.code=code;
+      const nowS=Date.now()+(+FB.so||0);
+      if(!snap.exists()){
+        clearLiveCreds();
+        LV.err='PERMISSION_DENIED';
+        if(LV.shown!=='PERMISSION_DENIED'){
+          LV.shown='PERMISSION_DENIED';
+          setFlash('Access code is no longer in the database — enter a new one before you start.');
+          if(opts.openPaywall)showLivePaywall();
+        }else if(opts.openPaywall&&!S.modal)showLivePaywall();
+        updLive();
+        return false;
+      }
+      const until=+((snap.val()||{}).expires)||0;
+      if(!(until>nowS)){
+        clearLiveCreds();
+        LV.err='PERMISSION_DENIED';
+        if(LV.shown!=='PERMISSION_DENIED'){
+          LV.shown='PERMISSION_DENIED';
+          setFlash('Access code expired — enter a new one before you start.');
+          if(opts.openPaywall)showLivePaywall();
+        }else if(opts.openPaywall&&!S.modal)showLivePaywall();
+        updLive();
+        return false;
+      }
+      // Keep local expiry in sync with the server
+      setLiveUntil(until-(+FB.so||0));
+      if(LV.err==='PERMISSION_DENIED'){LV.err='';LV.shown=''}
+      updLive();
+      return true;
+    }catch(e){
+      // Network/rules glitch while checking — don't wipe the code; start can still be attempted
+      return true;
+    }finally{LV_CHECK.inflight=null}
+  };
+  LV_CHECK.inflight=run();
+  return LV_CHECK.inflight;
+}
 // One place for every Firebase failure: remembers it for the status line and tells the person once.
 function liveErr(e){
   const c=(e&&e.code)||'error';
-  // Organizer: a deleted/invalid code still looked "live" from localStorage — clear it so a new code can be entered.
-  if(c==='PERMISSION_DENIED'&&!isH())clearLiveCreds();
+  const inRace=S.phase==='race'||S.phase==='done';
+  // Organizer: clear the stored unlock code so a new one can be entered later.
+  // Mid-race we keep S.raceLiveCode so this race can keep publishing until races/{rid}/until (server).
+  if(c==='PERMISSION_DENIED'&&!isH()){
+    clearLiveCreds();
+    if(!(S.phase==='race'||S.phase==='done')){S.raceLiveCode='';S.raceLiveUntil=0}
+  }
   LV.err=c;
   if(LV.shown!==c){
     LV.shown=c;
-    setFlash(c==='PERMISSION_DENIED'
-      ?(isH()?'Live sync blocked — check the invite or database rules':'Live sync blocked — that access code is no longer valid. Enter a new one.')
-      :'Live sync problem ('+c+')');
-    // Offer the code entry UI once (retries must not spam the modal).
-    if(c==='PERMISSION_DENIED'&&!isH())showLivePaywall();
+    if(c==='PERMISSION_DENIED'){
+      // Mid-race: never block the clock or force a code sheet — splits stay on this phone.
+      if(inRace){
+        setFlash(isH()
+          ?'Live upload paused — splits stay on this phone. Finish as normal; use Send to organizer (QR) if needed.'
+          :'Live sync paused (code expired) — splits stay on this phone. Finish the race as normal; QR still works.');
+      }else{
+        setFlash(isH()?'Live sync blocked — check the invite or database rules':'Live sync blocked — that access code is no longer valid. Enter a new one.');
+        if(!isH())showLivePaywall();
+      }
+    }else setFlash('Live sync problem ('+c+')');
   }
   updLive();
 }
@@ -1118,6 +1187,8 @@ function setOffline(v){
   try{localStorage.setItem('rst-offline-v1',v?'1':'0')}catch(e){}
   render();
   setFlash(v?'Live hosting off — use QR codes':fbOK()?'Live hosting on':'Live sync isn’t set up yet');
+  // Turning Live on with a stored code: verify it still exists before the race starts
+  if(!v&&hasLive())checkLiveCode({force:true,openPaywall:true});
 }
 function offToggle(withStatus){
   return `<label class="chk"><input type="checkbox" id="offm" ${S.offline?'':'checked'}><span>Live hosting</span></label><p class="hint">Live hosting lets helpers see the real race time, and lets you see results as they come in.</p>`+(withStatus===false?'':`<p class="hint" id="lvs">${esc(liveStatus().t)}</p>`);
@@ -1149,10 +1220,23 @@ function liveStatus(){
     if(h)return{t:nTaps()&&S.lv.dirty?'Live hosting is off — splits stay on this phone. Use Send to organizer (QR) to share them.':'Live hosting is off — use Send to organizer (QR).'};
     return{t:'Live hosting is off — import helper results with QR codes.'};
   }
-  if(LV.err)return{t:LV.err==='PERMISSION_DENIED'
-    ?(h?'Live sync blocked — check the invite or database rules.':'Live sync blocked — access code is no longer valid. Tap here to enter a new code.')
-    :'Live sync blocked ('+LV.err+') — tap here if you need to enter a new access code.'};
-  if(!h&&!hasLive())return{t:'Live hosting needs an access code on this phone — helpers and QR codes work without one. Tap here to enter a code.'};
+  if(LV.err){
+    const inRace=S.phase==='race'||S.phase==='done';
+    if(LV.err==='PERMISSION_DENIED'){
+      if(inRace)return{t:h
+        ?'Live upload paused — splits stay on this phone. Finish as normal; use QR to send if needed.'
+        :'Live sync paused (code expired) — all splits stay on this phone. Finish as normal; QR still works.'};
+      return{t:h?'Live sync blocked — check the invite or database rules.':'Live sync blocked — access code is no longer valid. Tap here to enter a new code.'};
+    }
+    return{t:'Live sync blocked ('+LV.err+')'+(inRace?' — splits stay on this phone.':' — tap here if you need to enter a new access code.')};
+  }
+  if(!h&&!hasLive()){
+    if((S.phase==='race'||S.phase==='done')&&(LV.krid||S.raceLiveCode))
+      return{t:'Live — access code expired, but this race keeps syncing until the meet window ends.'};
+    if(S.phase==='race'||S.phase==='done')
+      return{t:'Live hosting off for this race — splits stay on this phone. Finish as normal; QR still works.'};
+    return{t:'Live hosting needs an access code on this phone — helpers and QR codes work without one. Tap here to enter a code.'};
+  }
   if(!h&&!run)return{t:'Live sync on — helper splits arrive automatically once the race starts. QR still works too.'};
   if(h&&!S.hinv)return{t:'Live sync on — scan the organizer’s invite and your splits upload automatically.'};
   if(!FB.db||!FB.conn){
@@ -1213,7 +1297,7 @@ async function liveStep(){
   if(!(await ensureFB())){updLive();return}
   if(S.offline){if(!FB.gone){FB.db.goOffline();FB.gone=1;FB.conn=false}updLive();return}
   if(FB.gone){FB.db.goOnline();FB.gone=0}
-  if(isH()){orgDetach();liveFlush();hAttach()}else{hDetach();if(hasLive()){orgAttach();orgPublish()}else orgDetach()}
+  if(isH()){orgDetach();liveFlush();hAttach()}else{hDetach();if(canLivePublish()){orgAttach();orgPublish()}else orgDetach()}
   updLive();
 }
 // Called from render(): notices helper changes (new tap, undo, reorder) and marks them as not yet uploaded.
@@ -1226,6 +1310,9 @@ function liveTick(){
       if(sig!==L.sig){const first=!L.sig&&!Object.keys(core.m).length;L.sig=sig;if(!first){L.ver++;L.dirty=1}}
     }
   }else if(L.orid!==S.rid){L.orid=S.rid;L.src={};L.hts={}}
+  // Before the race: confirm the access code still exists in Firebase (deleted/expired → prompt now, not mid-race)
+  if(!isH()&&!S.offline&&hasLive()&&(S.phase==='setup'||S.phase==='dist'||S.phase==='ready'))
+    checkLiveCode({openPaywall:S.phase==='ready'});
   liveStep();
 }
 
@@ -1256,13 +1343,27 @@ async function liveFlush(){
 }
 
 // ---- organizer -> helpers: race clock, goals and everyone's splits ----
-// Each live race is tagged with the organizer's access code (races/{rid}/k, not readable by helpers).
-// The database rules only accept helper and organizer writes for a race whose code exists and hasn't expired.
+// Each live race is tagged with the organizer's access code (races/{rid}/k) and a race live window
+// (races/{rid}/until). Once a race is started with a valid code, the server accepts writes until
+// that window ends — even if the access code itself expires mid-race. See FIREBASE-SETUP.md.
+const RACE_LIVE_MS=12*3600*1000; // 12 hours covers a full meet day
+function raceLiveCode(){return S.raceLiveCode||liveCode()||''}
+// Live publish is allowed if the phone still has a valid access code, OR this race was already
+// stamped with a live key (so a code expiring mid-race does not stop uploads for that race).
+function canLivePublish(){
+  if(S.offline||!fbOK())return false;
+  if(hasLive())return true;
+  return (S.phase==='race'||S.phase==='done')&&!!S.rid&&!!(LV.krid||S.raceLiveCode);
+}
 function ensureRaceKey(rid){
-  const code=liveCode(),key=rid+'|'+code;
+  const code=raceLiveCode(),key=rid+'|'+code;
   if(LV.krid===key)return Promise.resolve();
   if(!code)return Promise.reject({code:'PERMISSION_DENIED'});
-  return FB.db.ref('races/'+rid+'/k').set(code).then(()=>{LV.krid=key});
+  // Stamp k + until together. until is set only while the access code is still valid (rules enforce that).
+  const until=Math.max(S.raceLiveUntil||0, Date.now()+RACE_LIVE_MS);
+  return FB.db.ref('races/'+rid).update({k:code,until:until}).then(()=>{
+    LV.krid=key;S.raceLiveCode=code;S.raceLiveUntil=until;saveState();
+  });
 }
 function oCore(){
   const g={};S.order.forEach(p=>{if(S.goals[p.id]>0)g[p.id]=S.goals[p.id]});
@@ -1273,22 +1374,23 @@ function oCore(){
 // Sent as one JSON string so Firebase never reshapes the arrays; debounced, and re-sent after a reconnect.
 function orgPublish(force){
   if(S.liveCleared||(LV.reap&&LV.reap===S.rid))return;
-  if(!hasLive())return;
+  if(!canLivePublish())return;
   if(!(S.phase==='race'||S.phase==='done')||!S.rid||!FB.db||S.offline)return;
   const d=JSON.stringify(oCore());
-  if(!force&&d===LV.osent&&LV.srid===S.rid&&LV.krid===S.rid+'|'+liveCode())return;
+  const code=raceLiveCode();
+  if(!force&&d===LV.osent&&LV.srid===S.rid&&LV.krid===S.rid+'|'+code)return;
   clearTimeout(LV.ot);
   const attempt=()=>{
     const rid=S.rid;
-    // Stop retrying once the access code was cleared (e.g. deleted from Firebase).
-    if(!hasLive()||!FB.db||!(S.phase==='race'||S.phase==='done')||S.offline)return;
+    // Keep retrying for this race even if the access code later expires (canLivePublish).
+    if(!canLivePublish()||!FB.db||!(S.phase==='race'||S.phase==='done')||S.offline)return;
     if(!FB.conn){LV.ot=setTimeout(attempt,500);return}
     const ts=(firebase.database&&firebase.database.ServerValue&&firebase.database.ServerValue.TIMESTAMP)||Date.now();
     try{
       ensureRaceKey(rid).then(()=>FB.db.ref('races/'+rid+'/h/_org').set({d,off:FB.so==null?null:FB.so,ts}))
         .then(()=>{LV.osent=d;LV.srid=rid;LV.err='';LV.shown='';updLive()})
-        .catch(e=>{liveErr(e);if(hasLive())LV.ot=setTimeout(attempt,3000)});
-    }catch(e){liveErr(e);if(hasLive())LV.ot=setTimeout(attempt,3000)}
+        .catch(e=>{liveErr(e);if(canLivePublish())LV.ot=setTimeout(attempt,3000)});
+    }catch(e){liveErr(e);if(canLivePublish())LV.ot=setTimeout(attempt,3000)}
   };
   LV.ot=setTimeout(attempt,force?0:250);
 }
@@ -1719,10 +1821,18 @@ function removeRunner(id){
   S.order=S.order.filter(p=>p.id!==id);S.pred=S.pred.filter(x=>x!==String(id));
   S.markers.forEach(k=>{const i=k.actual.indexOf(id);if(i<0)return;k.actual.splice(i,1);if(i<k.laps.length)k.laps.splice(i,1)});
 }
-function startRace(){
+async function startRace(){
+  // Last chance: if Live hosting is on, confirm the access code still exists before starting the clock
+  if(!S.offline&&fbOK()&&hasLive()){
+    const ok=await checkLiveCode({force:true,openPaywall:true});
+    if(!ok)return; // paywall is open; do not start with a dead code
+  }
   S.pred=S.order.map(p=>String(p.id));
   S.markers=mks().map((k,i)=>{const useTot=!S.marks.length&&k.dist===''&&+S.total>0;const m={label:k.label,dist:useTot?S.total:k.dist,unit:useTot?S.unit:(k.unit||S.unit),actual:S.order.map(p=>p.id),laps:[]};relabel(m,i);return m});S.cur=0;
   S.final=0;S.rid=S.invRid||Math.random().toString(36).slice(2,8);S.invRid='';S.epoch=Date.now();S.phase='race';S.start=performance.now();
+  // Lock in the access code for this race so live uploads continue even if the code expires mid-meet.
+  S.raceLiveCode=(!S.offline&&hasLive())?liveCode():'';
+  S.raceLiveUntil=S.raceLiveCode?Date.now()+RACE_LIVE_MS:0;
   LV.osent='';LV.srid='';LV.krid='';S.liveCleared=false; // force a fresh publish for the new race
   render();tick();
   // Ensure the organizer payload is written even if the first liveStep raced the connection
